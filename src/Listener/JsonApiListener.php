@@ -1042,38 +1042,35 @@ class JsonApiListener extends ApiListener
      */
     protected function _checkRequestData(): void
     {
-        $requestMethod = $this->_controller()->getRequest()->getMethod();
+        $request = $this->_controller()->getRequest();
+        $requestMethod = $request->getMethod();
+        $requestData = $request->getData();
 
-        if ($requestMethod !== 'POST' && $requestMethod !== 'PATCH' && $requestMethod !== 'DELETE') {
+        if (($requestMethod === 'POST' || $requestMethod === 'PATCH') && empty($requestData)) {
+            throw new BadRequestException(
+                'Missing request data required for POST and PATCH methods. ' .
+             'Make sure that you are sending a request body and that it is valid JSON.'
+            );
+        }
+        if (!in_array($requestMethod, ['POST', 'PATCH', 'DELETE'])) {
             return;
         }
 
-        $requestData = $this->_controller()->getRequest()->getData();
-
-        if (empty($requestData)) {
-            throw new BadRequestException(
-                'Missing request data required for POST and PATCH methods. ' .
-                 'Make sure that you are sending a request body and that it is valid JSON.'
-            );
-        }
-
         $validator = new DocumentValidator($requestData, $this->getConfig());
+        $this->isRelationshipURL = $this->_checkIsRelationshipsRequest();
 
-        $this->isRelationshipsURL = $this->_checkIsRelationshipsRequest();
-        if ($requestMethod === 'POST') {
-            if ($this->isRelationshipsURL) {
-                $relationshipValidator = new DocumentRelationshipValidator($requestData, $this->getConfig());
-                $relationshipValidator->validateUpdateDocument();
-            } else {
+        if ($this->isRelationshipURL) {
+            $relationshipValidator = new DocumentRelationshipValidator($requestData, $this->getConfig());
+            $relationshipValidator->validateUpdateDocument();
+        } else {
+            if ($requestMethod === 'DELETE') {
+                return;
+            }
+            if ($requestMethod === 'POST') {
                 $validator->validateCreateDocument();
             }
-        }
 
-        if ($requestMethod === 'PATCH' || $requestMethod === 'DELETE') {
-            if ($this->isRelationshipsURL) {
-                $relationshipValidator = new DocumentRelationshipValidator($requestData, $this->getConfig());
-                $relationshipValidator->validateUpdateDocument();
-            } else {
+            if ($requestMethod === 'PATCH' || $requestMethod === 'DELETE') {
                 $validator->validateUpdateDocument();
             }
         }
